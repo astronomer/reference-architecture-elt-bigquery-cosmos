@@ -1,0 +1,79 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: cheese_store      
+    tables:
+      - name: users
+        description: "Contains user information."
+      - name: cheeses
+        description: "Contains cheese details."
+      - name: sales
+        description: "Records of cheese sales."
+      - name: utms
+        description: "UTM parameters for tracking sources."
+
+models:
+  - name: enriched_sales
+    description: "Enriched sales data combining sales with user, cheese, and UTM information."
+    columns:
+      - name: sale_id
+        description: "Unique identifier for each sale."
+      - name: user_id
+        description: "Unique identifier for each user."
+      - name: user_name
+        description: "Name of the user."
+      - name: cheese_name
+        description: "Title of the cheese sold."
+      - name: cheese_type
+        description: "Genre of the cheese."
+      - name: quantity
+        description: "Number of cheeses sold in the sale."
+      - name: sale_date
+        description: "Date and time of the sale."
+      - name: utm_source
+        description: "UTM source parameter."
+      - name: utm_medium
+        description: "UTM medium parameter."
+      - name: utm_campaign
+        description: "UTM campaign parameter."
+      - name: utm_term
+        description: "UTM term parameter."
+      - name: utm_content
+        description: "UTM content parameter."
+      - name: total_revenue
+        description: "Total revenue generated from the sale."
+
+  - name: revenue_by_cheese_type
+    description: "Aggregated total revenue by cheese genre."
+    columns:
+      - name: cheese_type
+        description: "Genre of the cheese."
+      - name: total_revenue
+        description: "Total revenue for the cheese genre."
+
+  - name: sales_funnel_analysis
+    description: "Aggregated sales data by UTM campaign."
+    columns:
+      - name: utm_source
+      - name: utm_medium
+      - name: utm_campaign
+      - name: total_sales
+      - name: total_revenue
+      - name: utm_key
+
+  - name: user_purchase_summary
+    description: "Summary of purchases per user."
+    columns:
+      - name: user_id
+      - name: user_name
+      - name: total_purchases
+      - name: total_spent
+      - name: favorite_cheese
+
+  - name: top_users_by_spending
+    description: "Top 10 users by total spending."
+    columns:
+      - name: user_id
+      - name: user_name
+      - name: total_spent

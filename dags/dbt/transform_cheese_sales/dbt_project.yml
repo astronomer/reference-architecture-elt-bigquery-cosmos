@@ -1,0 +1,12 @@
+name: 'transform_cheese_sales'
+version: '1.0'
+config-version: 2
+
+profile: 'transform_cheese_sales'
+
+models:
+  transform_cheese_sales:
+    enriched_sales:
+      +materialized: 'incremental'
+      +unique_key: 'sale_id'
+      +on_schema_change: 'sync_all_columns'
