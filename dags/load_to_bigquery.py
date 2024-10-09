@@ -42,6 +42,10 @@ _LIST_OF_BASE_TABLES = ["users", "cheeses", "sales", "utms"]
 )
 def load_to_bigquery():
 
+    @task(inlets=[Dataset(f"gs://{_GCS_BUCKET_NAME}/{_INGEST_FOLDER_NAME}/*")])
+    def define_inlets():
+        return "Inlets defined"
+
     create_dataset = BigQueryCreateEmptyDatasetOperator(
         task_id="create_dataset", gcp_conn_id=_GCP_CONN_ID, dataset_id=_BQ_DATASET
     )
@@ -170,6 +174,7 @@ def load_to_bigquery():
         )
 
     chain(
+        define_inlets(),
         create_dataset,
         create_table,
         transfer_data.expand(table=_LIST_OF_BASE_TABLES),

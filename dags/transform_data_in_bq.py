@@ -4,12 +4,13 @@ from functools import reduce
 import os
 from datetime import datetime
 from pathlib import Path
-
+from airflow.decorators import dag, task
 
 from cosmos.profiles import GoogleCloudServiceAccountDictProfileMapping
 from cosmos import DbtDag, ProjectConfig, ProfileConfig, ExecutionConfig
 from cosmos import DbtTaskGroup, RenderConfig
 from cosmos.constants import SourceRenderingBehavior
+from airflow.models.baseoperator import chain
 
 # GCP
 _GCP_CONN_ID = os.getenv("GCP_CONN_ID", "gcp_default")
@@ -32,25 +33,43 @@ profile_config = ProfileConfig(
     ),
 )
 
-basic_cosmos_dag = DbtDag(
+
+@dag(
     dag_display_name="🛠️ Transform data in BigQuery",
-    dag_id="transform_data_in_bq",
-    project_config=ProjectConfig(
-        DBT_ROOT_PATH / "transform_cheese_sales",
-    ),
-    profile_config=profile_config,
-    operator_args={
-        "install_deps": True,
-        "full_refresh": True,
-    },
-    execution_config=ExecutionConfig(
-        dbt_executable_path=f"{os.environ['AIRFLOW_HOME']}/dbt_venv/bin/dbt",
-    ),
-    schedule=reduce(lambda x, y: x & y, _LIST_OF_BASE_TABLES_DATASETS),
     start_date=datetime(2024, 10, 1),
+    schedule=reduce(lambda x, y: x & y, _LIST_OF_BASE_TABLES_DATASETS),
     catchup=False,
-    default_args={"retries": 2},
-    render_config=RenderConfig(
-        source_rendering_behavior="all",
-    )
+    tags=["ELT"],
 )
+def transform_data_in_bq():
+
+    @task(
+        inlets=[_LIST_OF_BASE_TABLES_DATASETS]
+    )
+    def define_inlets():
+        return "Inlets defined"
+
+    tg = DbtTaskGroup(
+        project_config=ProjectConfig(
+            DBT_ROOT_PATH / "transform_cheese_sales",
+        ),
+        profile_config=profile_config,
+        operator_args={
+            "install_deps": True,
+            "full_refresh": True,
+        },
+        execution_config=ExecutionConfig(
+            dbt_executable_path=f"{os.environ['AIRFLOW_HOME']}/dbt_venv/bin/dbt",
+        ),
+        render_config=RenderConfig(
+            source_rendering_behavior="all",
+        ),
+    )
+
+    chain(
+        define_inlets(),
+        tg,
+    )
+
+
+transform_data_in_bq()

@@ -6,6 +6,7 @@ from airflow.providers.google.cloud.operators.bigquery import (
     BigQueryCheckOperator,
     BigQueryGetDataOperator,
 )
+from airflow.models.baseoperator import chain
 import os
 
 # GCP
@@ -21,6 +22,12 @@ _BQ_DATASET = os.getenv("BQ_DATASET", "cheese_store")
     catchup=False,
 )
 def top_users_report():
+
+    @task(
+        inlets=[Dataset(f"bigquery/{_PROJECT_ID}.{_BQ_DATASET}.top_users_by_spending")]
+    )
+    def define_inlets():
+        return "Inlets defined"
 
     query_data = BigQueryGetDataOperator(
         task_id="query_data",
@@ -67,7 +74,7 @@ def top_users_report():
             },
         )
 
-    post_top_cheese_enthusiasts_to_slack(query_data.output)
+    chain(define_inlets(), post_top_cheese_enthusiasts_to_slack(query_data.output))
 
 
 top_users_report()
