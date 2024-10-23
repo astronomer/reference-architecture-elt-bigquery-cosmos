@@ -1,28 +1,32 @@
 """
 ## Extract data from an API and load it to GCS
 
+This DAG extracts data about cheese sales from a mocked API and loads it to GCS.
+You can specify the number of sales to fetch from the API using the `num_sales` 
+DAG parameter in the Airflow UI's Trigger DAG view.
+
 To use a different remote storage option replace the GCSCreateBucketOperator,
 as well as change the OBJECT_STORAGE_DST, CONN_ID_DST and KEY_DST
 parameters.
 """
 
-from airflow.decorators import dag, task
-from airflow.datasets import Dataset
-from airflow.models.baseoperator import chain
-from airflow.io.path import ObjectStoragePath
-from airflow.providers.google.cloud.operators.gcs import GCSCreateBucketOperator
-from airflow.providers.google.cloud.hooks.gcs import GCSHook
-from airflow.models.param import Param
-from pendulum import datetime, duration
-import pandas as pd
 import logging
 import os
+
+import pandas as pd
+from airflow.datasets import Dataset
+from airflow.decorators import dag, task
+from airflow.models.baseoperator import chain
+from airflow.models.param import Param
+from airflow.providers.google.cloud.hooks.gcs import GCSHook
+from airflow.providers.google.cloud.operators.gcs import GCSCreateBucketOperator
+from pendulum import datetime, duration
 
 # Get the Airflow task logger
 t_log = logging.getLogger("airflow.task")
 
-# GCP
-_GCP_CONN_ID = os.getenv("GCP_CONN_ID", "gcp_default")
+# GCP variables
+_GCP_CONN_ID = os.getenv("GCP_CONN_ID", "gcp_conn")
 _GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "my-bucket")
 _INGEST_FOLDER_NAME = os.getenv("INGEST_FOLDER_NAME", "cheese-sales-ingest")
 _PROJECT_ID = os.getenv("PROJECT_ID", "my-project")
@@ -34,26 +38,26 @@ _PROJECT_ID = os.getenv("PROJECT_ID", "my-project")
 
 
 @dag(
-    dag_display_name="📊 Extract data from the internal API and load it to GCS",
-    start_date=datetime(2024, 8, 1),
-    schedule="@daily",
-    catchup=False,
+    dag_display_name="📊 Extract data from the internal API and load it to GCS",  # The name of the DAG displayed in the Airflow UI
+    start_date=datetime(2024, 10, 18),  # date after which the DAG can be scheduled
+    schedule="@daily",  # see: https://www.astronomer.io/docs/learn/scheduling-in-airflow for options
+    catchup=False,  # see: https://www.astronomer.io/docs/learn/rerunning-dags#catchup
     max_consecutive_failed_dag_runs=10,  # auto-pauses the DAG after 10 consecutive failed runs, experimental
     default_args={
-        "owner": "Data team",
-        "retries": 3,
-        "retry_delay": duration(minutes=1),
+        "owner": "Data team",  # owner of this DAG in the Airflow UI
+        "retries": 3,  # tasks retry 3 times before they fail
+        "retry_delay": duration(minutes=1),  # tasks wait 1 minute in between retries
     },
-    params={
+    params={  # Airflow params can add interactive options on manual runs. See: https://www.astronomer.io/docs/learn/airflow-params
         "num_sales": Param(
             100,
             description="The number of sales to fetch from the API.",
             type="number",
         ),
     },
-    doc_md=__doc__,
-    description="ETL",
-    tags=["ETL", "GCS", "Internal API"],
+    doc_md=__doc__,  # add DAG Docs in the UI, see https://www.astronomer.io/docs/learn/custom-airflow-ui-docs-tutorial
+    description="EL",  # description next to the DAG name in the UI
+    tags=["EL", "GCS", "Internal API"],  # add tags in the UI
 )
 def api_to_GCS():
 
@@ -109,8 +113,6 @@ def api_to_GCS():
 
     get_new_sales_from_api_obj = get_new_sales_from_api()
 
-    # TODO: add transform step here
-
     @task(
         map_index_template="{{ my_custom_map_index }}",
     )
@@ -149,7 +151,7 @@ def api_to_GCS():
     write_to_gcs_obj = write_to_gcs.expand(data_to_write=get_new_sales_from_api_obj)
 
     @task(outlets=[Dataset(f"gs://{_GCS_BUCKET_NAME}/{_INGEST_FOLDER_NAME}/*")])
-    def update_dataset():
+    def update_dataset() -> str:
         return "Cheese data ready in GCS!"
 
     # ------------------------------ #

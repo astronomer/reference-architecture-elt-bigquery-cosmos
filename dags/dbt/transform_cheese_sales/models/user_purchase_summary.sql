@@ -1,5 +1,3 @@
--- models/user_purchase_summary.sql
-
 {{ config(
     materialized='incremental',
     unique_key='user_id',

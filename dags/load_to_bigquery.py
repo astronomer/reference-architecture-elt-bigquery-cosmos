@@ -1,12 +1,20 @@
-import os
+"""
+## Load data from GCS to BigQuery
 
-from airflow.decorators import dag, task_group, task
+This DAG loads data from GCS to BigQuery using the BigQuery Data Transfer Service.
+"""
+
+import os
+from typing import cast
+
+from airflow.datasets import Dataset, DatasetAlias
+from airflow.datasets.metadata import Metadata
+from airflow.decorators import dag, task, task_group
 from airflow.models.baseoperator import chain
+from airflow.models.xcom_arg import XComArg
 from airflow.providers.google.cloud.operators.bigquery import (
-    BigQueryCheckOperator,
-    BigQueryGetDataOperator,
-    BigQueryInsertJobOperator,
     BigQueryCreateEmptyDatasetOperator,
+    BigQueryInsertJobOperator,
 )
 from airflow.providers.google.cloud.operators.bigquery_dts import (
     BigQueryCreateDataTransferOperator,
@@ -16,15 +24,10 @@ from airflow.providers.google.cloud.operators.bigquery_dts import (
 from airflow.providers.google.cloud.sensors.bigquery_dts import (
     BigQueryDataTransferServiceTransferRunSensor,
 )
-from airflow.datasets import Dataset, DatasetAlias
-from airflow.datasets.metadata import Metadata
-from typing import cast
-from pendulum import datetime
-from airflow.models.xcom_arg import XComArg
-import time
+from pendulum import datetime, duration
 
-# GCP
-_GCP_CONN_ID = os.getenv("GCP_CONN_ID", "gcp_default")
+# GCP variables
+_GCP_CONN_ID = os.getenv("GCP_CONN_ID", "gcp_conn")
 _GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "my-bucket")
 _INGEST_FOLDER_NAME = os.getenv("INGEST_FOLDER_NAME", "cheese-sales-ingest")
 _PROJECT_ID = os.getenv("PROJECT_ID", "my-project")
@@ -33,25 +36,46 @@ _BQ_DATASET = os.getenv("BQ_DATASET", "cheese_store")
 _LIST_OF_BASE_TABLES = ["users", "cheeses", "sales", "utms"]
 
 
+# -------------- #
+# DAG definition #
+# -------------- #
+
+
 @dag(
-    dag_display_name="🐘 Load data from GCS to BigQuery",
-    start_date=datetime(2024, 10, 1),
-    schedule=[Dataset(f"gs://{_GCS_BUCKET_NAME}/{_INGEST_FOLDER_NAME}/*")],
-    catchup=False,
-    tags=["ELT"],
+    dag_display_name="🐘 Load data from GCS to BigQuery",  # The name of the DAG displayed in the Airflow UI
+    start_date=datetime(2024, 10, 18),  # date after which the DAG can be scheduled
+    schedule=[
+        Dataset(f"gs://{_GCS_BUCKET_NAME}/{_INGEST_FOLDER_NAME}/*")
+    ],  # this DAG uses a Dataset schedule, see https://www.astronomer.io/docs/learn/airflow-datasets
+    catchup=False,  # see: https://www.astronomer.io/docs/learn/rerunning-dags#catchup
+    max_consecutive_failed_dag_runs=10,  # auto-pauses the DAG after 10 consecutive failed runs, experimental
+    default_args={
+        "owner": "Data team",  # owner of this DAG in the Airflow UI
+        "retries": 3,  # tasks retry 3 times before they fail
+        "retry_delay": duration(minutes=1),  # tasks wait 1 minute in between retries
+    },
+    doc_md=__doc__,  # add DAG Docs in the UI, see https://www.astronomer.io/docs/learn/custom-airflow-ui-docs-tutorial
+    description="Load",  # description next to the DAG name in the UI
+    tags=["L", "GCS", "BigQuery"],  # add tags in the UI
 )
 def load_to_bigquery():
 
     @task(inlets=[Dataset(f"gs://{_GCS_BUCKET_NAME}/{_INGEST_FOLDER_NAME}/*")])
-    def define_inlets():
+    def define_inlets() -> str:
         return "Inlets defined"
 
+    # create the BQ dataset if it doesn't exist yet
     create_dataset = BigQueryCreateEmptyDatasetOperator(
         task_id="create_dataset", gcp_conn_id=_GCP_CONN_ID, dataset_id=_BQ_DATASET
     )
 
     @task
-    def create_table_creation_configs():
+    def create_table_creation_configs() -> list[dict]:
+        """
+        Create a list of configurations for creating tables in BigQuery.
+        Returns:
+            list[dict]: List of configurations for creating tables in BigQuery.
+        """
         list_of_configs = []
 
         for table in _LIST_OF_BASE_TABLES:
@@ -77,11 +101,19 @@ def load_to_bigquery():
         map_index_template="Creating table: {{ task.configuration['query']['query'][27:47] }}",
     ).expand(configuration=create_table_creation_configs())
 
+    # create a task group to transfer data for each table
     @task_group
     def transfer_data(table):
 
         @task
-        def create_transfer_config(table, **context):
+        def create_transfer_config(table, **context) -> dict:
+            """
+            Create a transfer configuration for the given table.
+            Args:
+                table (str): The name of the table to transfer.
+            Returns:
+                dict: The transfer configuration.
+            """
 
             ts = context["ts"]
 
@@ -117,6 +149,7 @@ def load_to_bigquery():
             map_index_template="Creating transfer config for table: {{task.transfer_config['params']['destination_table_name_template']}}",
         )
 
+        # get the transfer config id from the XCom of the previous task
         transfer_config_id = cast(
             str, XComArg(gcp_bigquery_create_transfer, key="transfer_config_id")
         )
@@ -151,6 +184,11 @@ def load_to_bigquery():
             map_index_template="{{ my_custom_map_index }}",
         )
         def update_dataset(table):
+            """
+            Update the Airflow dataset of table that was created in BigQuery.
+            Args:
+                table (str): The table that was created in BigQuery.
+            """
             table_uri = f"{_PROJECT_ID}:{_BQ_DATASET}.{table}"
             yield Metadata(
                 Dataset(f"{table_uri}"),
@@ -164,6 +202,7 @@ def load_to_bigquery():
             context = get_current_context()
             context["my_custom_map_index"] = f"Updating Dataset for {table}"
 
+        # set dependencies of tasks inside the task group
         chain(
             create_transfer_config_obj,
             gcp_bigquery_create_transfer,
@@ -173,6 +212,7 @@ def load_to_bigquery():
             update_dataset(table),
         )
 
+    # set dependencies of tasks and task the task group
     chain(
         define_inlets(),
         create_dataset,

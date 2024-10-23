@@ -1,5 +1,3 @@
--- models/sales_funnel_analysis.sql
-
 {{ config(
     materialized='incremental',
     unique_key='utm_key',
@@ -17,7 +15,6 @@ WITH aggregated_sales AS (
     GROUP BY utm_source, utm_medium, utm_campaign
 ),
 
--- Create a unique composite key for upserts
 aggregated_sales_with_key AS (
     SELECT
         *,

@@ -1,25 +1,44 @@
-from airflow.decorators import dag, task
-from pendulum import datetime
-from airflow.datasets import Dataset
-from airflow.providers.google.cloud.operators.bigquery import (
-    BigQueryInsertJobOperator,
-    BigQueryCheckOperator,
-    BigQueryGetDataOperator,
-)
-from airflow.models.baseoperator import chain
+"""
+## Create reports for the top cheese enthusiasts
+
+This DAG creates a report of the top users by spending in the cheese store. 
+The report is then sent to a Slack channel.
+"""
+
 import os
 
-# GCP
-_GCP_CONN_ID = os.getenv("GCP_CONN_ID", "gcp_default")
+from airflow.datasets import Dataset
+from airflow.decorators import dag, task
+from airflow.models.baseoperator import chain
+from airflow.providers.google.cloud.operators.bigquery import BigQueryGetDataOperator
+from pendulum import datetime, duration
+
+# GCP variables
+_GCP_CONN_ID = os.getenv("GCP_CONN_ID", "gcp_conn")
 _PROJECT_ID = os.getenv("PROJECT_ID", "my-project")
 _BQ_DATASET = os.getenv("BQ_DATASET", "cheese_store")
 
+# -------------- #
+# DAG definition #
+# -------------- #
+
 
 @dag(
-    dag_display_name="🧀 Top users by spending report",
-    start_date=datetime(2024, 10, 1),
-    schedule=[Dataset(f"bigquery/{_PROJECT_ID}.{_BQ_DATASET}.top_users_by_spending")],
-    catchup=False,
+    dag_display_name="🧀 Top users by spending report",  # The name of the DAG displayed in the Airflow UI
+    start_date=datetime(2024, 10, 18),  # date after which the DAG can be scheduled
+    schedule=[
+        Dataset(f"bigquery/{_PROJECT_ID}.{_BQ_DATASET}.top_users_by_spending")
+    ],  # this DAG uses a Dataset schedule, see https://www.astronomer.io/docs/learn/airflow-datasets
+    catchup=False,  # see: https://www.astronomer.io/docs/learn/rerunning-dags#catchup
+    max_consecutive_failed_dag_runs=10,  # auto-pauses the DAG after 10 consecutive failed runs, experimental
+    default_args={
+        "owner": "Product team",  # owner of this DAG in the Airflow UI
+        "retries": 3,  # tasks retry 3 times before they fail
+        "retry_delay": duration(minutes=1),  # tasks wait 1 minute in between retries
+    },
+    doc_md=__doc__,  # add DAG Docs in the UI, see https://www.astronomer.io/docs/learn/custom-airflow-ui-docs-tutorial
+    description="Reporting",  # description next to the DAG name in the UI
+    tags=["Reporting", "Slack", "BigQuery"],  # add tags in the UI
 )
 def top_users_report():
 
@@ -29,6 +48,7 @@ def top_users_report():
     def define_inlets():
         return "Inlets defined"
 
+    # Query the top users by spending in the cheese store
     query_data = BigQueryGetDataOperator(
         task_id="query_data",
         gcp_conn_id=_GCP_CONN_ID,
@@ -40,13 +60,12 @@ def top_users_report():
     @task
     def post_top_cheese_enthusiasts_to_slack(top_cheese_eaters: str) -> None:
         """
-        Send the executive summary to a Slack channel.
+        Send info about top cheese enthusiasts to a Slack channel.
         Args:
-            insight (str): Executive summary.
+            top_cheese_eaters (str): The top cheese eaters in the store.
         """
         from airflow.providers.slack.hooks.slack import SlackHook
 
-        # format the message top_cheese_eaters is a list of lists with the [1] element being the name
         top_cheese_eaters = "\n".join(
             [
                 f"{i+1}. {info[1]} spent ${round(float(info[2]),2)} on cheese!"

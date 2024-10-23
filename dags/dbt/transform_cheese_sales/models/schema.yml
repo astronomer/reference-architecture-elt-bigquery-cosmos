@@ -11,7 +11,7 @@ sources:
       - name: sales
         description: "Records of cheese sales."
       - name: utms
-        description: "UTM parameters for tracking sources."
+        description: "UTM parameters for lead tracking sources."
 
 models:
   - name: enriched_sales
@@ -24,9 +24,9 @@ models:
       - name: user_name
         description: "Name of the user."
       - name: cheese_name
-        description: "Title of the cheese sold."
+        description: "Name of the cheese sold."
       - name: cheese_type
-        description: "Genre of the cheese."
+        description: "Type of the cheese."
       - name: quantity
         description: "Number of cheeses sold in the sale."
       - name: sale_date
@@ -45,12 +45,12 @@ models:
         description: "Total revenue generated from the sale."
 
   - name: revenue_by_cheese_type
-    description: "Aggregated total revenue by cheese genre."
+    description: "Aggregated total revenue by cheese type."
     columns:
       - name: cheese_type
-        description: "Genre of the cheese."
+        description: "Type of the cheese."
       - name: total_revenue
-        description: "Total revenue for the cheese genre."
+        description: "Total revenue for the cheese type."
 
   - name: sales_funnel_analysis
     description: "Aggregated sales data by UTM campaign."

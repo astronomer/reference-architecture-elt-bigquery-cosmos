@@ -1,5 +1,3 @@
--- models/top_users_by_spending.sql
-
 {{ config(
     materialized='incremental',
     unique_key='user_id',

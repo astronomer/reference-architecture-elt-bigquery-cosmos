@@ -1,48 +1,67 @@
-Overview
-========
+## ELT with BigQuery, dbt and Apache Airflow® - Reference architecture
 
-Welcome to Astronomer! This project was generated after you ran 'astro dev init' using the Astronomer CLI. This readme describes the contents of the project, as well as how to run Apache Airflow on your local machine.
+Welcome! 🚀
 
-Project Contents
-================
+This project is an end-to-end pipeline showing how to implement an ELT pattern with [Google BigQuery](https://cloud.google.com/bigquery), [dbt Core](https://github.com/dbt-labs/dbt-core) and [Apache Airflow®](https://airflow.apache.org/). The pipeline extracts data from a mocked internal API about an online cheese store, loads the raw data into [Google Cloud Storage S3](https://cloud.google.com/storage), transfers the data to BigQuery where a dbt Core project is used to create enriched reporting tables in several transformation steps. Finally the pipeline sends information about the top customers to a [Slack](https://slack.com/) channel.
 
-Your Astro project contains the following files and folders:
+You can use this project as a starting point to build your own pipelines for similar use cases. 
 
-- dags: This folder contains the Python files for your Airflow DAGs. By default, this directory includes one example DAG:
-    - `example_astronauts`: This DAG shows a simple ETL pipeline example that queries the list of astronauts currently in space from the Open Notify API and prints a statement for each astronaut. The DAG uses the TaskFlow API to define tasks in Python, and dynamic task mapping to dynamically print a statement for each astronaut. For more on how this DAG works, see our [Getting started tutorial](https://www.astronomer.io/docs/learn/get-started-with-airflow).
-- Dockerfile: This file contains a versioned Astro Runtime Docker image that provides a differentiated Airflow experience. If you want to execute other commands or overrides at runtime, specify them here.
-- include: This folder contains any additional files that you want to include as part of your project. It is empty by default.
-- packages.txt: Install OS-level packages needed for your project by adding them to this file. It is empty by default.
-- requirements.txt: Install Python packages needed for your project by adding them to this file. It is empty by default.
-- plugins: Add custom or community plugins for your project to this file. It is empty by default.
-- airflow_settings.yaml: Use this local-only file to specify Airflow Connections, Variables, and Pools instead of entering them in the Airflow UI as you develop DAGs in this project.
+> [!TIP]
+> If you are new to Airflow, we recommend checking out our get started resources: [DAG writing for data engineers and data scientists](https://www.astronomer.io/events/webinars/dag-writing-for-data-engineers-and-data-scientists-video/) before diving into this project.
 
-Deploy Your Project Locally 
-===========================
+## Tools used
 
-1. Start Airflow on your local machine by running 'astro dev start'.
+- [Apache Airflow®](https://airflow.apache.org/docs/apache-airflow/stable/index.html) running on [Astro](https://www.astronomer.io/product/). A [free trial](http://qrco.de/bfHv2Q) is available.
+- [Google Cloud Storage](https://cloud.google.com/storage) for storing raw data.
+- [Google BigQuery](https://cloud.google.com/bigquery) for storing and querying transformed data.
+- [dbt Core](https://github.com/dbt-labs/dbt-core) to define transformations.
 
-This command will spin up 4 Docker containers on your machine, each for a different Airflow component:
+Optional:
 
-- Postgres: Airflow's Metadata Database
-- Webserver: The Airflow component responsible for rendering the Airflow UI
-- Scheduler: The Airflow component responsible for monitoring and triggering tasks
-- Triggerer: The Airflow component responsible for triggering deferred tasks
+The last DAG posts a notification to Slack about the top cheese enthusiasts. If you don't want to use Slack, remove the `top_users_report` DAG from the `dags` folder.
 
-2. Verify that all 4 Docker containers were created by running 'docker ps'.
+- A [Slack](https://slack.com/) workspace with permissions to add a new app is needed for the Slack notification tasks.
 
-Note: Running 'astro dev start' will start your project with the Airflow Webserver exposed at port 8080 and Postgres exposed at port 5432. If you already have either of those ports allocated, you can either [stop your existing Docker containers or change the port](https://www.astronomer.io/docs/astro/cli/troubleshoot-locally#ports-are-not-available-for-my-local-airflow-webserver).
+## How to setup the demo environment
 
-3. Access the Airflow UI for your local Airflow project. To do so, go to http://localhost:8080/ and log in with 'admin' for both your Username and Password.
+Follow the steps below to set up the demo for yourself.
 
-You should also be able to access your Postgres Database at 'localhost:5432/postgres'.
+1. Install Astronomer's open-source local Airflow development tool, the [Astro CLI](https://www.astronomer.io/docs/astro/cli/overview).
+2. Log into your Google Cloud Platform account and create a set of [credentials](https://cloud.google.com/iam/docs/authentication) for Airflow with permissions to create, write to and read from a GCS bucket, as well as to create, write to and query BigQuery tables and use the [BigQuery Data Transfer Service](https://cloud.google.com/bigquery/docs/dts-introduction).
+3. Fork this repository and clone the code locally.
+4. (Optional) Create a new Slack app and install it in your workspace. You can follow the instructions in the [Slack API documentation](https://api.slack.com/start) to retrieve an API token for the app.
 
-Deploy Your Project to Astronomer
-=================================
+### Run the project locally
 
-If you have an Astronomer account, pushing code to a Deployment on Astronomer is simple. For deploying instructions, refer to Astronomer documentation: https://www.astronomer.io/docs/astro/deploy-code/
+1. Create a new file called `.env` in the root of the cloned repository and copy the contents of [.env_example](.env_example) into it. Fill out the placeholders with your own credentials for GCP, and optionally Slack.
 
-Contact
-=======
+It is also possible to set the connections in the Airflow UI. For GCP select the `google_cloud_platform` connection type, provide your `Project Id` and paste your JSON credentials into the `Keyfile JSON` field. For Slack, select the `slack` connection type and paste your Slack API token into the `Password` field.
 
-The Astronomer CLI is maintained with love by the Astronomer team. To report a bug or suggest a change, reach out to our support.
+Note that in a production use case you may want to enable the [Custom XCom backend](https://www.astronomer.io/docs/learn/xcom-backend-tutorial) using the commented environment variables in the `.env` file. 
+
+2. In the root of the repository, run `astro dev start` to start up the following Docker containers. This is your local development environment.
+
+    - Postgres: Airflow's Metadata Database.
+    - Webserver: The Airflow component responsible for rendering the Airflow UI. Accessible on port `localhost:8080`.
+    - Scheduler: The Airflow component responsible for monitoring and triggering tasks
+    - Triggerer: The Airflow component responsible for triggering deferred tasks
+
+    Note that after any changes to `.env` you will need to run `astro dev restart` for new environment variables to be picked up.
+
+3. Access the Airflow UI at `localhost:8080` and follow the DAG running instructions in the [Running the DAGs](#running-the-dags) section of this README.
+
+### Run the project in the cloud
+
+1. Sign up to [Astro](https://www.astronomer.io/try-astro/?utm_source=learn-docs-reference-architectures&utm_medium=web&utm_campaign=free-trial) for free and follow the onboarding flow to create a deployment with default configurations.
+2. Deploy the project to Astro using `astro deploy`. See [Deploy code to Astro](https://www.astronomer.io/docs/astro/deploy-code).
+3. Set up your GCP and, optionally, Slack connection, as well as all other environment variables listed in [`.env_example](.env_example) on Astro. For instructions see [Manage Airflow connections and variables](https://www.astronomer.io/docs/astro/manage-connections-variables) and [Manage environment variables on Astro](https://www.astronomer.io/docs/astro/manage-env-vars).
+4. Open the Airflow UI of your Astro deployment and follow the steps in [Running the DAGs](#running-the-dags).
+
+## Running the DAGs
+
+1. Unpause all DAGs in the Airflow UI by clicking the toggle to the left of the DAG name.
+2. The `Extract data from the internal API and load it to GCS` DAG will start its first run automatically. All other DAGs are scheduled based on Datasets to run as soon as the required data is available.
+
+## Next steps
+
+If you'd like to build your own ELT pipeline with BigQuery and dbt, feel free adapt this repository to your use case. We recommend to deploy the Airflow pipelines using a [free trial](https://www.astronomer.io/try-astro/?utm_source=learn-docs-reference-architectures&utm_medium=web&utm_campaign=free-trial) of Astro.

@@ -1,5 +1,3 @@
--- models/enriched_sales.sql
-
 {{ config(
     materialized='incremental',
     unique_key='sale_id',
@@ -7,14 +5,12 @@
 ) }}
 
 {% if is_incremental() %}
-  -- For incremental runs, only process new or updated records
   WITH new_sales AS (
     SELECT *
     FROM {{ source('raw', 'sales') }}
     WHERE sale_date > (SELECT MAX(sale_date) FROM {{ this }})
   )
 {% else %}
-  -- For full runs, process all records
   WITH new_sales AS (
     SELECT *
     FROM {{ source('raw', 'sales') }}
@@ -26,7 +22,7 @@ SELECT
     s.user_id,
     u.user_name,
     b.cheese_title AS cheese_name,
-    b.cheese_genre AS cheese_type,
+    b.cheese_type AS cheese_type,
     s.quantity,
     s.sale_date,
     uparams.utm_source,

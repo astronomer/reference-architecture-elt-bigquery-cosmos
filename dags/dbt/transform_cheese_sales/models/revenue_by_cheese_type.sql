@@ -1,5 +1,3 @@
--- models/revenue_by_cheese_type.sql
-
 {{ config(
     materialized='incremental',
     unique_key='cheese_type',
